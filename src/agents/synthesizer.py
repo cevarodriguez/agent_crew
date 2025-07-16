@@ -3,33 +3,45 @@ from typing import List, Dict, Any
 import openai
 
 class Synthesizer:
-    def __init__(self, model="gpt-3.5-turbo", temperature=0.1):
+    """
+    Synthesizes answers from PDF and web context chunks using an LLM,
+    and returns both the answer and the cited sources.
+    """
+
+    def __init__(self, model: str = "gpt-3.5-turbo", temperature: float = 0.1):
         self.model = model
         self.temperature = temperature
 
     def format_context(self, chunks: List[Dict[str, Any]]) -> str:
         """
-        Formats context for the LLM. Includes text and its citation.
+        Formats context for the LLM. Includes text and its citation as [N] or [WN].
         """
         context_strs = []
-        for i, chunk in enumerate(chunks):
+        for chunk in chunks:
             text = chunk["text"].replace("\n", " ")
             citation = chunk["citation"]
-            citation_str = f"[{i+1}] {citation['filename']}, page {citation.get('page', '?')}"
+            ctype = chunk.get("citation_type", "pdf")
+            cnum = chunk.get("citation_num", 1)
+            if ctype == "pdf":
+                citation_str = f"[{cnum}] {citation.get('filename', 'PDF')}, page {citation.get('page', '?')}"
+            elif ctype == "web":
+                citation_str = f"[W{cnum}] {citation.get('title', citation.get('url', 'web'))}"
+            else:
+                citation_str = f"[{cnum}]"
             context_strs.append(f"{citation_str}: {text}")
         return "\n\n".join(context_strs)
     
     def build_prompt(self, question: str, chunks: List[Dict[str, Any]]) -> str:
         """
-        Builds a prompt for the LLM including context and explicit instructions
+        Builds a prompt for the LLM including context and explicit instructions.
         """
         context = self.format_context(chunks)
         prompt = (
             "You are an expert neuroscience research assistant. "
             "Given the following extracts from research papers and web sources, answer the user's question. "
-            "Cite your sources by their number in square brackets (e.g., [1]). "
-            "If you don't know, say so honestly. Do not cite outside or non-existent sources."
-            f"Context: \n{context}\n\n"
+            "Cite PDF sources as [1], [2], etc., and web sources as [W1], [W2], etc., using the numbers provided in the context. "
+            "If you don't know, say so honestly. Do not cite outside or non-existent sources.\n\n"
+            f"Context:\n{context}\n\n"
             f"Question: {question}\n\n"
             "Answer (with citations):"
         )
@@ -45,26 +57,36 @@ class Synthesizer:
             {"role": "system", "content": "You are a neuroscience research assistant."},
             {"role": "user", "content": prompt}
         ]
-        response = openai.ChatCompletion.create(
-            model=self.model,
-            messages=messages,
-            temperature=self.temperature,
-            max_tokens=max_tokens
-        )
-        answer = response.choices[0].message.content.strip()
+        try:
+            response = openai.ChatCompletion.create(
+                model=self.model,
+                messages=messages,
+                temperature=self.temperature,
+                max_tokens=max_tokens
+            )
+            answer = response.choices[0].message.content.strip()
+        except Exception as e:
+            answer = f"Error: Failed to get an answer from the LLM: {e}"
 
-        # Simple way to parse which sources (numbers) were cited in the answer
-        cited = re.findall(r"\[(\d+)\]", answer)
-        cited_indices = set(int(i) - 1 for i in cited if i.isdigit())
+        # Parse citations for both PDF ([1], [2]) and web ([W1], [W2])
+        pdf_cited = re.findall(r"\[(\d+)\]", answer)
+        web_cited = re.findall(r"\[W(\d+)\]", answer)
+
+        cited_indices = set()
+        for i, chunk in enumerate(chunks):
+            ctype = chunk.get("citation_type", "pdf")
+            cnum = str(chunk.get("citation_num", 1))
+            if (ctype == "pdf" and cnum in pdf_cited) or (ctype == "web" and cnum in web_cited):
+                cited_indices.add(i)
+
         cited_sources = [
             chunks[i]["citation"]
             for i in cited_indices
             if 0 <= i < len(chunks)
         ]
 
-        # You can also include the actual context chunks used for transparency
         return {
             "answer": answer,
             "sources": cited_sources,
-            "reasoning": "Synthesized by LLM based on retrieved document chunks."
+            "reasoning": "Synthesized by LLM based on provided document and web chunks."
         }
