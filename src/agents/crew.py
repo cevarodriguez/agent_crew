@@ -1,4 +1,5 @@
 import logging
+import re
 from agents.retriever import PDFRetriever
 from agents.synthesizer import Synthesizer
 from agents.memory import MemoryKeeper
@@ -16,9 +17,6 @@ class Crew:
             persist_dir: str = "chroma_db",
             model: str = "gpt-3.5-turbo"
     ):
-        """
-        Initializes all crew agents and prepares retriever vector store.
-        """
         self.logger = logging.getLogger("Crew")
         self.retriever = PDFRetriever(papers_dir, persist_dir)
         self.synthesizer = Synthesizer(model=model)
@@ -38,28 +36,54 @@ class Crew:
                 raise
 
     def handle_question(self, question: str) -> Dict[str, Any]:
-        """
-        Handles a user question by retrieving PDF and web evidence, synthesizing an answer,
-        saving it in memory, and returning a structured response.
-        """
-        # 1. Retrieve from PDFs
+        """Handles a user question and returns a structured response with sources and conversational memory."""
+        meta_q = question.lower().strip()
+        history = self.memory.get_history()
+        ORDINAL_WORDS = {
+            "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+            "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
+        }
+
+        # --- Meta-question handlers ---
+        for word, n in ORDINAL_WORDS.items():
+            if f"{word} question" in meta_q:
+                if n <= len(history):
+                    answer = history[n-1]["question"]
+                else:
+                    answer = f"There is no question number {n}."
+                return {"answer": answer, "sources": [], "memory": history}
+        nth_q_match = re.search(r"(?:what\s+was\s+)?(?:the\s+)?(\d+)(?:st|nd|rd|th)?\s+question", meta_q)
+        if nth_q_match:
+            n = int(nth_q_match.group(1))
+            if 1 <= n <= len(history):
+                answer = history[n - 1]["question"]
+            else:
+                answer = f"There is no question number {n}."
+            return {"answer": answer, "sources": [], "memory": history}
+        if "last question" in meta_q:
+            answer = history[-2]["question"] if len(history) > 1 else "Not enough history."
+            return {"answer": answer, "sources": [], "memory": history}
+        if "last answer" in meta_q:
+            answer = history[-2]["answer"] if len(history) > 1 else "Not enough history."
+            return {"answer": answer, "sources": [], "memory": history}
+        if "previous questions" in meta_q or "list questions" in meta_q:
+            questions = [entry["question"] for entry in history[:-1]] if len(history) > 1 else []
+            answer = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions)) if questions else "No previous questions."
+            return {"answer": answer, "sources": [], "memory": history}
+
+        # --- Normal question (RAG) flow ---
         try:
             pdf_chunks = self.retriever.retrieve(question)
         except Exception as e:
             self.logger.error(f"Failed to retrieve from PDFs: {e}")
             pdf_chunks = []
-
-        # 2. Retrieve from web
         try:
             web_chunks = self.websearcher.search(question, num_results=3)
         except Exception as e:
             self.logger.error(f"Failed to retrieve from web: {e}")
             web_chunks = []
 
-        # 3. Get conversational memory (last 3 QAs)
-        history = self.memory.get_history(n=3)
-
-        # 4. Combine chunks, numbering PDFs as [1], [2] and web as [W1], [W2]
+        history3 = self.memory.get_history(n=3)
         all_chunks = []
         for i, chunk in enumerate(pdf_chunks):
             chunk = dict(chunk)
@@ -73,34 +97,29 @@ class Crew:
             all_chunks.append(chunk)
 
         if not all_chunks or not all(isinstance(chunk, dict) and "text" in chunk for chunk in all_chunks):
-            print("DEBUG: No valid text chunks found in retrieval. Chunks:", all_chunks)
+            self.logger.debug(f"No valid text chunks found in retrieval. Chunks: {all_chunks}")
             result = {
                 "answer": "Sorry, I couldn't find any relevant information in the documents or online.",
                 "sources": [],
                 "reasoning": "No retrievable context."
             }
         else:
-            result = self.synthesizer.synthesize(question, all_chunks)
+            try:
+                result = self.synthesizer.synthesize(question, all_chunks)
+            except Exception as e:
+                self.logger.error(f"Synthesizer failed: {e}")
+                result = {
+                    "answer": "Sorry, an error occurred while generating the answer.",
+                    "sources": [],
+                    "reasoning": f"Error: {e}"
+                }
 
-
-        # 5. Synthesize answer
-        try:
-            result = self.synthesizer.synthesize(question, all_chunks)
-        except Exception as e:
-            self.logger.error(f"Synthesizer failed: {e}")
-            result = {
-                "answer": "Sorry, an error occurred while generating the answer.",
-                "sources": [],
-                "reasoning": f"Error: {e}"
-            }
-
-        # 6. Store in memory
         self.memory.add(question, result["answer"], result["sources"])
-
-        # 7. Return structured response
-        response = {
+        return {
             "answer": result["answer"],
             "sources": result["sources"],
-            "memory": history,
+            "memory": history3,
         }
-        return response
+
+
+
