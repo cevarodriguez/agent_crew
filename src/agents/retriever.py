@@ -1,10 +1,14 @@
 import os
 import glob
 from typing import List, Dict, Optional
-from langchain.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import Chroma
-from langchain.embeddings import OpenAIEmbeddings
+from langchain_chroma import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+#from langchain_community.embeddings import HuggingFaceEmbeddings
+#from langchain_openai import OpenAIEmbeddings
+#from langchain_community.vectorstores import Chroma
+#from langchain_community.embeddings import OpenAIEmbeddings
 
 class PDFRetriever:
     """
@@ -17,7 +21,8 @@ class PDFRetriever:
         """
         self.papers_dir = papers_dir
         self.persist_dir = persist_dir
-        self.embedding = OpenAIEmbeddings()
+        self.embedding = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        #self.embedding = OpenAIEmbeddings()
         self.vector_db = None
 
     def load_and_index_papers(self) -> None:
@@ -57,7 +62,7 @@ class PDFRetriever:
                 self.embedding,
                 persist_directory=self.persist_dir
             )
-            self.vector_db.persist()
+            #self.vector_db.persist()
             print("Embedding and storage complete.")
         except Exception as e:
             print("Failed to embed and store documents:", e)
@@ -73,6 +78,11 @@ class PDFRetriever:
             persist_directory=self.persist_dir,
             embedding_function=self.embedding
         )
+        # Dummy test
+        try:
+            _ = self.vector_db._collection.count()
+        except Exception as e:
+            raise RuntimeError(f"Failed to load Chroma index: {e}")
 
     def retrieve(self, query: str, top_k: int = 4) -> List[Dict[str, Dict[str, str]]]:
         """

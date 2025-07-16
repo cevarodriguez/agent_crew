@@ -72,6 +72,17 @@ class Crew:
             chunk["citation_num"] = i + 1
             all_chunks.append(chunk)
 
+        if not all_chunks or not all(isinstance(chunk, dict) and "text" in chunk for chunk in all_chunks):
+            print("DEBUG: No valid text chunks found in retrieval. Chunks:", all_chunks)
+            result = {
+                "answer": "Sorry, I couldn't find any relevant information in the documents or online.",
+                "sources": [],
+                "reasoning": "No retrievable context."
+            }
+        else:
+            result = self.synthesizer.synthesize(question, all_chunks)
+
+
         # 5. Synthesize answer
         try:
             result = self.synthesizer.synthesize(question, all_chunks)

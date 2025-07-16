@@ -1,5 +1,8 @@
 import logging
 from agents.crew import Crew
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def main():
     logging.basicConfig(level=logging.INFO)
@@ -25,7 +28,7 @@ def main():
             elif "url" in source:
                 print(f" Web: {source['title']} ({source['url']})")
             print("-" * 40)
-            
+
 
 if __name__ == "__main__":
     main()

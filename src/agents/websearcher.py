@@ -60,7 +60,7 @@ class WebSearcher:
                 "type": "web",
                 "rank": i + 1,
                 "title": item.get("title", ""),
-                "snippet": snippet,
+                "text": snippet,
                 "url": item.get("link", ""),
                 "citation": {
                     "url": item.get("link", ""),

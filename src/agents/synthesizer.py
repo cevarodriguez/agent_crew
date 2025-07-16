@@ -58,13 +58,15 @@ class Synthesizer:
             {"role": "user", "content": prompt}
         ]
         try:
-            response = openai.ChatCompletion.create(
+            client = openai.OpenAI()
+            response = client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=self.temperature,
                 max_tokens=max_tokens
             )
             answer = response.choices[0].message.content.strip()
+
         except Exception as e:
             answer = f"Error: Failed to get an answer from the LLM: {e}"
 
