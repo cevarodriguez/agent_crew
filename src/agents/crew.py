@@ -105,7 +105,7 @@ class Crew:
             }
         else:
             try:
-                result = self.synthesizer.synthesize(question, all_chunks)
+                result = self.synthesizer.synthesize(question, all_chunks, history=history3)
             except Exception as e:
                 self.logger.error(f"Synthesizer failed: {e}")
                 result = {

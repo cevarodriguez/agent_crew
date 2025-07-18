@@ -33,6 +33,9 @@ MANIFEST
 *.manifest
 *.spec
 
+# Chroma DB
+chroma_db/
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt

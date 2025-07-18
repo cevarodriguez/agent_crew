@@ -5,10 +5,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
-#from langchain_community.embeddings import HuggingFaceEmbeddings
-#from langchain_openai import OpenAIEmbeddings
-#from langchain_community.vectorstores import Chroma
-#from langchain_community.embeddings import OpenAIEmbeddings
+
 
 class PDFRetriever:
     """
@@ -22,7 +19,6 @@ class PDFRetriever:
         self.papers_dir = papers_dir
         self.persist_dir = persist_dir
         self.embedding = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        #self.embedding = OpenAIEmbeddings()
         self.vector_db = None
 
     def load_and_index_papers(self) -> None:
@@ -62,7 +58,6 @@ class PDFRetriever:
                 self.embedding,
                 persist_directory=self.persist_dir
             )
-            #self.vector_db.persist()
             print("Embedding and storage complete.")
         except Exception as e:
             print("Failed to embed and store documents:", e)
