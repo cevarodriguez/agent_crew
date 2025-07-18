@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def main():
     logging.basicConfig(level=logging.INFO)
     crew = Crew()
